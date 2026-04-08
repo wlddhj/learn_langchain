@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "learn-langchain"
+version = "0.1.0"
+description = "LangChain AI Agent 学习项目 - 从零基础到独立构建 AI Agent 应用"
+readme = "docs/README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "langchain>=0.1.0",
+    "langchain-core>=0.1.0",
+    "langchain-openai>=0.0.5",
+    "langgraph>=0.0.20",
+    "python-dotenv>=1.0.0",
+    "langchain-text-splitters>=0.0.1",
+    "langchain-community>=0.0.10",
+    "faiss-cpu>=1.7.0",
+]
+
+
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "black>=23.0",
+    "flake8>=6.0",
+]
+
+anthropic = [
+    "langchain-anthropic>=0.0.5",
+]
+
+rag = [
+    "chromadb>=0.4.0",
+    "faiss-cpu>=1.7.0",
+    "pypdf>=3.0",
+    "beautifulsoup4>=4.12.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["demo*", "data*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
