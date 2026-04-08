@@ -6,12 +6,13 @@
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 
 # 数据目录
 data/vector_store/
 data/reports/
 *.db
-
+uv.lock
 # IDE
 .vscode/
 .idea/
