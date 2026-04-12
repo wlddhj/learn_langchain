@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from langchain_core.embeddings import Embeddings
+
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 if not os.environ.get("QWEN_API_KEY") or os.environ["QWEN_API_KEY"].startswith("your-"):
@@ -33,11 +35,59 @@ llm = ChatOpenAI(model=QWEN_MODEL, temperature=0, api_key=QWEN_API_KEY, base_url
 # 使用 Qwen 的 Embedding 模型（通过 OpenAI 兼容接口）
 from langchain_openai import OpenAIEmbeddings
 
-embeddings = OpenAIEmbeddings(
-    model="text-embedding-v3",
-    api_key=QWEN_API_KEY,
-    base_url=QWEN_BASE_URL,
-)
+
+class DashScopeEmbeddings(Embeddings):
+    """通义千问 Embeddings 实现"""
+
+    def __init__(self, api_key=None, model="text-embedding-v1"):
+        self.api_key = api_key or os.environ["QWEN_API_KEY"]
+        self.model = model
+
+        # 配置 dashscope
+        import dashscope
+        dashscope.api_key = self.api_key
+
+    def embed_documents(self, texts):
+        from dashscope import TextEmbedding
+
+        # 确保所有文本都是字符串
+        texts = [str(text) for text in texts]
+
+        # 分批处理，每批最多25个文本
+        batch_size = 25
+        all_embeddings = []
+
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+
+            # 调用 API - 每个文本单独调用
+            batch_embeddings = []
+            for text in batch:
+                response = TextEmbedding.call(
+                    model=self.model,
+                    input=text  # 直接传入单个字符串
+                )
+
+                # 检查响应
+                if response.status_code == 200:
+                    embedding = response.output['embeddings'][0]['embedding']
+                    batch_embeddings.append(embedding)
+                else:
+                    print(f"Embedding API 错误: {response.code} - {response.message}")
+                    # 返回零向量作为备选
+                    zero_dim = 1536
+                    batch_embeddings.append([0.0] * zero_dim)
+
+            all_embeddings.extend(batch_embeddings)
+
+        return all_embeddings
+
+    def embed_query(self, text):
+        return self.embed_documents([str(text)])[0]
+
+
+# 使用自定义 embeddings
+embeddings = DashScopeEmbeddings(api_key=QWEN_API_KEY)
 
 
 # ============================================================
