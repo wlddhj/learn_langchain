@@ -34,7 +34,7 @@
 |------|------|----------|
 | 第9章 | [09-tools.md](09-tools.md) | Tools 工具定义：@tool 装饰器、StructuredTool、工具参数 schema |
 | 第10章 | [10-agent-basics.md](10-agent-basics.md) | Agent 基础：Agent 类型、ReAct 模式、create_react_agent |
-| 第11章 | [11-agent-executor.md](11-agent-executor.md) | AgentExecutor：执行循环、错误处理、最大迭代次数、回调机制 |
+| 第11章 | [11-agent-executor.md](11-agent-executor.md) | Agent 执行控制与调试：执行循环、错误处理、流式追踪、回调机制 |
 | 第12章 | [12-custom-tools.md](12-custom-tools.md) | 自定义工具开发：API 调用工具、数据库查询工具、文件操作工具 |
 
 ## 第四部分：进阶实践

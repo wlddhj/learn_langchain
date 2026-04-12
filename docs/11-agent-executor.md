@@ -1,4 +1,6 @@
-# 第11章：AgentExecutor 与 Agent 调试
+# 第11章：Agent 执行控制与调试
+
+> **说明**：旧版 LangChain 使用 `AgentExecutor` 类来管理 Agent 执行循环。当前最佳实践是使用 LangGraph（第13章），它提供了更精细的执行控制。本章基于 LangGraph 讲解 Agent 的执行控制、调试和优化技巧。
 
 ## 11.1 Agent 的工作循环
 

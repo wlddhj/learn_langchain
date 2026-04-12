@@ -259,7 +259,7 @@ chain_with_retry = chain.with_retry(
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda, RunnableParallel
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
@@ -274,24 +274,26 @@ review_prompt = ChatPromptTemplate.from_template(
 # 翻译 chain
 translate_chain = translate_prompt | llm | StrOutputParser()
 
-# 评价 chain
+# 评价 chain（需要原文和译文）
 review_chain = review_prompt | llm | StrOutputParser()
 
-# 完整 chain：翻译 + 评价并行
-full_chain = (
-    {
-        "translation": translate_chain,
-        "text": lambda x: x["text"],
-        "language": lambda x: x["language"],
-    }
-    | RunnableParallel(
-        translation=lambda x: x["translation"],
-        review=lambda x: review_chain.invoke({
-            "text": x["text"],
-            "translation": x["translation"],
-        }),
-    )
+# 步骤1：翻译，同时保留原始输入
+step1 = {
+    "translation": translate_chain,
+    "text": lambda x: x["text"],
+    "language": lambda x: x["language"],
+}
+
+# 步骤2：基于翻译结果进行评价
+step2 = RunnablePassthrough.assign(
+    review=lambda x: review_chain.invoke({
+        "text": x["text"],
+        "translation": x["translation"],
+    })
 )
+
+# 完整 chain
+full_chain = step1 | step2
 
 result = full_chain.invoke({
     "text": "人工智能正在改变世界",

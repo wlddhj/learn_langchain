@@ -42,8 +42,8 @@ uv add langchain-community    # 社区集成（第三方服务）
 uv add langgraph
 
 # 向量数据库（RAG 章节使用）
-uv add chromadb               # 轻量级本地向量数据库
-uv add faiss-cpu              # Facebook 的向量检索库
+uv add langchain-chroma              # Chroma 向量数据库（推荐）
+uv add faiss-cpu                     # Facebook 的向量检索库
 
 # 文档处理
 uv add pypdf                  # PDF 解析
@@ -105,6 +105,49 @@ print(response.content)
 | VS Code / Cursor | 代码编辑器 |
 | Jupyter Notebook | 交互式学习（强烈推荐） |
 | LangSmith | LangChain 可观测性平台（调试利器） |
+
+### 配置国产模型（推荐国内开发者）
+
+LangChain 通过 OpenAI 兼容接口支持国内主流模型，只需修改 `api_key` 和 `base_url`：
+
+```python
+# 智谱 GLM
+from langchain_openai import ChatOpenAI
+llm = ChatOpenAI(
+    model="glm-4-flash",
+    api_key="your-glm-api-key",
+    base_url="https://open.bigmodel.cn/api/paas/v4",
+)
+
+# 通义千问 Qwen
+llm = ChatOpenAI(
+    model="qwen-plus",
+    api_key="your-qwen-api-key",
+    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+)
+
+# DeepSeek
+llm = ChatOpenAI(
+    model="deepseek-chat",
+    api_key="your-deepseek-api-key",
+    base_url="https://api.deepseek.com",
+)
+```
+
+在 `.env` 中配置：
+
+```bash
+# 选择其中一个即可
+GLM_API_KEY=your-glm-api-key
+GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+GLM_MODEL=glm-4-flash
+
+QWEN_API_KEY=your-qwen-api-key
+QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+QWEN_MODEL=qwen-plus
+```
+
+> **提示**：代码中只需改 `model`、`api_key`、`base_url` 三个参数，其余 LangChain 用法完全相同。
 
 ### LangSmith 配置（可选但推荐）
 

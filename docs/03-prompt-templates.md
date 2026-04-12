@@ -171,6 +171,8 @@ full_prompt = ChatPromptTemplate.from_messages([
 
 ## 3.7 PipelinePromptTemplate（管道组合）
 
+> **注意**：`PipelinePromptTemplate` 在新版 LangChain 中已废弃。推荐使用 LCEL 管道或 `+` 操作符组合模板。
+
 将多个子模板组合成一个大模板：
 
 ```python
@@ -202,6 +204,28 @@ pipeline_prompt = PipelinePromptTemplate(
         ("context", context_template),
     ]
 )
+```
+
+**推荐替代方案**：使用 LCEL 管道或直接拼接字符串更灵活：
+
+```python
+# 方式一：直接在 chain 中组合（推荐）
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "你是一个{role}。请回答以下问题。"),
+    ("human", "参考信息：{reference}\n\n问题：{question}"),
+])
+
+chain = prompt | llm | StrOutputParser()
+
+result = chain.invoke({
+    "role": "Python 专家",
+    "reference": "装饰器是 Python 的高级特性...",
+    "question": "什么是装饰器？",
+})
 ```
 
 ## 3.8 实用技巧

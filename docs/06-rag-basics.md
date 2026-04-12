@@ -186,6 +186,7 @@ print(f"无关文档相似度: {cosine_similarity(q_vec, d2_vec):.4f}")  # ~0.3
 ### Chroma（本地开发推荐）
 
 ```python
+# 安装: pip install langchain-chroma
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 

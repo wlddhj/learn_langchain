@@ -248,41 +248,103 @@ graph = builder.compile()
 
 ## 14.5 错误恢复
 
+### 方式一：节点内部重试
+
 ```python
+import time
 from langgraph.graph import StateGraph, START, END
 
-def unreliable_node(state):
-    """可能失败的节点"""
-    import random
-    if random.random() < 0.5:
-        raise ValueError("随机失败")
-    return {"result": "成功"}
-
 class RobustState(TypedDict):
-    attempts: int
+    task: str
     result: str
     error: str
 
-def retry_node(state: RobustState):
-    """重试节点"""
-    attempts = state.get("attempts", 0) + 1
-    if attempts >= 3:
-        return {"error": "超过最大重试次数"}
-    return {"attempts": attempts}
+def call_api_with_retry(url: str, max_retries: int = 3) -> dict:
+    """带重试的 API 调用"""
+    import httpx
 
-# 使用 checkpointer 的状态来恢复
-def run_with_retry(graph, input_data, config, max_retries=3):
     for attempt in range(max_retries):
         try:
-            result = graph.invoke(input_data, config)
-            return result
-        except Exception as e:
-            print(f"第 {attempt + 1} 次失败: {e}")
-            # 从检查点恢复状态
-            state = graph.get_state(config)
-            if state:
-                input_data = None  # 使用保存的状态继续
-    return None
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(url)
+                response.raise_for_status()
+                return response.json()
+        except (httpx.TimeoutException, httpx.ConnectionError) as e:
+            if attempt == max_retries - 1:
+                raise
+            wait = 2 ** attempt  # 指数退避: 1s, 2s, 4s
+            time.sleep(wait)
+
+def robust_node(state: RobustState):
+    """带错误恢复的节点"""
+    try:
+        data = call_api_with_retry(f"https://api.example.com/{state['task']}")
+        return {"result": str(data), "error": ""}
+    except Exception as e:
+        return {"result": "", "error": f"任务失败: {e}"}
+```
+
+### 方式二：LangGraph 级别的重试
+
+```python
+from langgraph.graph import StateGraph, START, END
+
+# 构建图时，可以给节点包装重试逻辑
+def build_robust_graph():
+    builder = StateGraph(RobustState)
+
+    # 正常处理节点
+    def process(state: RobustState):
+        if state.get("error"):
+            return {"result": "已跳过失败的任务"}
+        return {"result": f"处理完成: {state['task']}"}
+
+    # 错误处理节点
+    def handle_error(state: RobustState):
+        if state.get("error"):
+            print(f"捕获错误: {state['error']}")
+            # 可以记录日志、发送告警、降级处理
+            return {"result": "降级处理完成", "error": ""}
+        return {}
+
+    def route_by_error(state: RobustState):
+        if state.get("error"):
+            return "handle_error"
+        return "process"
+
+    builder.add_node("process", process)
+    builder.add_node("handle_error", handle_error)
+
+    builder.add_edge(START, "process")
+    builder.add_conditional_edges("process", route_by_error)
+    builder.add_edge("handle_error", END)
+
+    return builder.compile()
+```
+
+### 方式三：使用 Checkpointer 恢复中断的执行
+
+```python
+from langgraph.checkpoint.memory import MemorySaver
+
+checkpointer = MemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
+
+config = {"configurable": {"thread_id": "task-1"}}
+
+# 执行中断后，可以从检查点恢复
+try:
+    result = graph.invoke({"task": "data_processing"}, config)
+except Exception as e:
+    print(f"执行中断: {e}")
+
+    # 查看中断时的状态
+    state = graph.get_state(config)
+    print(f"下一步要执行的节点: {state.next}")
+    print(f"当前状态: {state.values}")
+
+    # 修复问题后，继续执行
+    result = graph.invoke(None, config)  # 传 None 使用已保存的状态
 ```
 
 ## 14.6 动态图修改
