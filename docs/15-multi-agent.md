@@ -12,13 +12,35 @@
 - **专业高效**：每个 Agent 使用定制 prompt 和工具
 - **可扩展**：新增 Agent 即可扩展能力
 
-## 15.2 常见多 Agent 模式
+### 单 Agent vs 多 Agent 的选择
 
-| 模式 | 特点 | 适用场景 |
-|------|------|----------|
-| **Supervisor** | 中心调度器分配任务 | 复杂工作流管理 |
-| **Swarm** | Agent 间直接交接 | 灵活协作 |
-| **Hierarchical** | 多层级管理 | 大型项目 |
+| 维度 | 单 Agent | 多 Agent |
+|------|---------|---------|
+| 工具数量 | 3-7 个合适 | 每个 Agent 2-5 个 |
+| 任务复杂度 | 简单明确 | 多步骤、多领域 |
+| 维护成本 | 低 | 较高 |
+| 调试难度 | 低 | 较高 |
+| Token 消耗 | 较少 | 较多（多个 LLM 调用） |
+| 适用场景 | 客服、查询 | 研究+写作+审核 |
+
+**原则**：能单 Agent 解决的不要用多 Agent，需要时才引入复杂度。
+
+## 15.2 三种多 Agent 模式对比
+
+| 模式 | 结构 | 调度方式 | 适用场景 |
+|------|------|---------|---------|
+| **Supervisor** | 星形，中心调度 | 调度器决定分配 | 工作流管理、顺序执行 |
+| **Swarm** | 网状，自由交接 | Agent 自主决定交接 | 客服转接、灵活协作 |
+| **Hierarchical** | 树形，多层管理 | 上级分配给下级 | 大型项目、复杂组织 |
+
+```
+Supervisor 模式:          Swarm 模式:           Hierarchical 模式:
+   [Supervisor]           [A] ←→ [B]            [Top Supervisor]
+   /    |    \            [B] ←→ [C]            /              \
+ [A]  [B]   [C]          [C] ←→ [A]       [Mid-1]          [Mid-2]
+                            任意交接            / \              / \
+                                          [A] [B]          [C] [D]
+```
 
 ## 15.3 Supervisor 模式
 
@@ -124,7 +146,21 @@ for msg in result["messages"]:
         print(f"AI: {msg.content[:200]}")
 ```
 
-## 15.4 Swarm 模式
+## 15.4 Supervisor 的工作原理
+
+Supervisor 本质上是一个特殊的 LLM 调用，它的任务是分析当前对话并决定下一步：
+
+```
+用户消息 → Supervisor(LLM) → 输出下一个 Agent 名称
+                                    ↓
+                          "researcher" → 交给研究 Agent
+                          "writer"     → 交给写作 Agent
+                          "FINISH"     → 结束
+```
+
+Agent 执行完任务后，结果回到 Supervisor，Supervisor 再决定是否需要其他 Agent 继续处理。
+
+## 15.5 Swarm 模式
 
 Agent 之间直接交接，无需中心调度：
 
@@ -170,7 +206,7 @@ def router(state):
     return END
 ```
 
-## 15.5 层级模式 (Hierarchical)
+## 15.6 层级模式 (Hierarchical)
 
 ```
               [Top Supervisor]
@@ -207,7 +243,16 @@ def top_supervisor(state):
     pass
 ```
 
-## 15.6 Agent 间通信模式
+## 15.7 Agent 间通信模式
+
+### 两种通信方式对比
+
+| 方式 | 原理 | 优点 | 缺点 |
+|------|------|------|------|
+| **共享 State** | 通过 State 字段传递数据 | 简单直观，全局可见 | 耦合度高 |
+| **消息传递** | 通过 messages 列表传递 | 松耦合，更灵活 | 信息可能丢失上下文 |
+
+实际项目中通常是两种方式混合使用。
 
 ### 共享 State
 
@@ -233,7 +278,7 @@ def agent_a_node(state):
     return {"messages": result["messages"]}
 ```
 
-## 15.7 完整示例：内容创作团队
+## 15.8 完整示例：内容创作团队
 
 ```python
 from typing import TypedDict, Annotated, Literal
@@ -321,7 +366,7 @@ result = graph.invoke({
 print(result["article"])
 ```
 
-## 15.8 多 Agent 系统设计原则
+## 15.9 多 Agent 系统设计原则
 
 1. **明确的职责划分**：每个 Agent 有清晰的职责边界
 2. **简洁的通信协议**：通过共享 State 或消息传递
@@ -329,7 +374,7 @@ print(result["article"])
 4. **设置最大循环次数**：防止 Agent 间无限传递
 5. **可观测性**：每个 Agent 的输入输出都应该可追踪
 
-## 15.9 本章小结
+## 15.10 本章小结
 
 - **Supervisor 模式**：中心调度器分配任务（最常用）
 - **Swarm 模式**：Agent 间直接交接

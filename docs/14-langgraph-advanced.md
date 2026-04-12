@@ -1,6 +1,25 @@
 # 第14章：LangGraph 进阶
 
-## 14.1 状态持久化 (Persistence)
+## 14.1 状态持久化的意义
+
+普通 Graph 每次调用都是全新的，没有记忆。持久化解决的核心问题：
+
+| 场景 | 无持久化 | 有持久化 |
+|------|---------|---------|
+| 多轮对话 | 每次都忘 | 自动记住上下文 |
+| 人机交互 | 无法暂停 | 暂停等待人工确认 |
+| 错误恢复 | 从头重跑 | 从断点继续 |
+| 时间旅行 | 无法回溯 | 回到任意检查点 |
+
+### 检查点存储选项
+
+| 存储方式 | 适用场景 | 持久性 |
+|---------|---------|--------|
+| `MemorySaver` | 开发测试 | 内存，进程退出即丢失 |
+| `SqliteSaver` | 单机部署 | 磁盘文件 |
+| `PostgresSaver` | 生产环境 | 数据库，高可用 |
+
+## 14.2 状态持久化 (Persistence)
 
 让 Graph 可以暂停和恢复执行，支持长时间运行的工作流：
 
@@ -47,11 +66,25 @@ with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
     )
 ```
 
-## 14.2 人机交互 (Human-in-the-Loop)
+## 14.3 人机交互 (Human-in-the-Loop)
+
+### 为什么需要人机交互
+
+Agent 全自动运行有风险——特别是在以下场景：
+
+- **敏感操作**：发送邮件、删除数据、执行交易
+- **质量把关**：AI 生成的代码/文案需要人工审核
+- **关键决策**：多方案选择时需要人类判断
+- **合规要求**：某些操作必须有审批记录
 
 在关键决策点暂停，等待人工确认后继续：
 
-### interrupt_before / interrupt_after
+### interrupt_before vs interrupt_after
+
+| 参数 | 暂停时机 | 适用场景 |
+|------|---------|---------|
+| `interrupt_before=["execute"]` | 执行节点之前 | 审批敏感操作 |
+| `interrupt_after=["analyze"]` | 执行节点之后 | 确认分析结果 |
 
 ```python
 from langgraph.checkpoint.memory import MemorySaver
@@ -138,7 +171,14 @@ print("邮件草稿:", state.values.get("email_draft"))
 graph.invoke({"approved": True}, config)
 ```
 
-## 14.3 子图 (Subgraph)
+## 14.4 子图 (Subgraph)
+
+### 什么时候用子图
+
+- **复用**：同一个工作流在多个主图中使用（如"搜索+分析"模块）
+- **封装**：把复杂流程封装为一个黑盒节点
+- **测试**：子图可以独立编译和测试
+- **团队协作**：不同成员开发不同的子图
 
 将复杂流程拆分为可复用的子图：
 
@@ -204,7 +244,19 @@ main_builder.add_edge("write", END)
 main_graph = main_builder.compile()
 ```
 
-## 14.4 并行执行
+## 14.5 并行执行
+
+### 并行执行的原理
+
+当多个节点从同一个节点分叉出去时，LangGraph 会并行执行它们：
+
+```
+       ┌── node_a ──┐
+START ─┤            ├── combine → END
+       └── node_b ──┘
+```
+
+注意：合并节点（combine）会**等待所有并行节点完成后**才执行。
 
 ```python
 from langgraph.graph import StateGraph, START, END
@@ -246,7 +298,7 @@ builder.add_edge("combine", END)
 graph = builder.compile()
 ```
 
-## 14.5 错误恢复
+## 14.6 错误恢复
 
 ### 方式一：节点内部重试
 
@@ -347,7 +399,7 @@ except Exception as e:
     result = graph.invoke(None, config)  # 传 None 使用已保存的状态
 ```
 
-## 14.6 动态图修改
+## 14.7 动态图修改
 
 运行时修改图的执行流程：
 
@@ -368,7 +420,7 @@ def should_use_tools(state):
     return END
 ```
 
-## 14.7 时间旅行调试
+## 14.8 时间旅行调试
 
 利用检查点回溯到之前的状态：
 
@@ -394,7 +446,7 @@ old_state = state_history[-1]  # 最早的检查点
 graph.invoke(None, old_state.config)  # 从该点继续
 ```
 
-## 14.8 本章小结
+## 14.9 本章小结
 
 - **状态持久化**：使用 `MemorySaver` 或 SQLite 保存执行状态
 - **人机交互**：`interrupt_before/after` 在关键节点暂停，等待人工确认
