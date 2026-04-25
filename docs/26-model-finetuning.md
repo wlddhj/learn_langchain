@@ -142,6 +142,194 @@
 └── 企业级大规模定制，有充足的算力和数据
 ```
 
+#### 全量微调实战代码
+
+```python
+"""
+全量微调示例
+需要：GPU显存 >40GB（7B模型）、数据 >10000条
+"""
+
+import torch
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainingArguments,
+    Trainer,
+    DataCollatorForSeq2Seq,
+    BitsAndBytesConfig,
+)
+from datasets import Dataset
+
+# ===== 1. 加载模型 =====
+model_name = "Qwen/Qwen2.5-7B-Instruct"
+
+# 方式A：直接加载（需要大显存）
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype=torch.bfloat16,  # 使用 bfloat16 节省显存
+    device_map="auto",
+)
+
+# 方式B：使用 DeepSpeed ZeRO-3 分片（多卡场景）
+# 需配置 deepspeed_config.json
+# training_args = TrainingArguments(deepspeed="deepspeed_config.json")
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+# ===== 2. 准备数据 =====
+train_data = [
+    {"instruction": "什么是 Python？", "output": "Python 是一门高级编程语言..."},
+    {"instruction": "什么是机器学习？", "output": "机器学习是人工智能的一个分支..."},
+    # ... 更多数据（建议 >10000 条）
+]
+
+def format_example(example):
+    """格式化为模型输入"""
+    prompt = f"<|im_start|>user\n{example['instruction']}<|im_end|>\n<|im_start|>assistant\n{example['output']}<|im_end|>"
+    return {"text": prompt}
+
+dataset = Dataset.from_list(train_data)
+dataset = dataset.map(format_example)
+
+def tokenize(example):
+    """Tokenize"""
+    return tokenizer(
+        example["text"],
+        truncation=True,
+        max_length=512,
+        padding="max_length",
+    )
+
+tokenized_dataset = dataset.map(tokenize, remove_columns=["text"])
+
+# ===== 3. 配置训练参数 =====
+training_args = TrainingArguments(
+    output_dir="./full_finetune_output",
+    
+    # 训练轮数（全量微调容易过拟合，建议较少轮数）
+    num_train_epochs=2,
+    
+    # 批次大小（全量微调显存需求大，批次通常较小）
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=16,  # 梯度累积模拟大批次
+    
+    # 学习率（全量微调学习率通常较小）
+    learning_rate=1e-5,  # 比 LoRA 小 10 倍
+    
+    # 优化器
+    optim="adamw_torch_fused",
+    weight_decay=0.01,
+    
+    # 精度
+    bf16=True,  # 使用 bfloat16
+    fp16=False,
+    
+    # 显存优化
+    gradient_checkpointing=True,  # 梯度检查点节省显存
+    max_grad_norm=1.0,
+    
+    # 日志与保存
+    logging_steps=10,
+    save_steps=500,
+    save_total_limit=3,
+    
+    # 其他
+    warmup_ratio=0.05,
+    lr_scheduler_type="cosine",
+)
+
+# ===== 4. 创建训练器 =====
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=tokenized_dataset,
+    data_collator=DataCollatorForSeq2Seq(tokenizer, model=model),
+)
+
+# ===== 5. 开始训练 =====
+trainer.train()
+
+# ===== 6. 保存模型 =====
+model.save_pretrained("./finetuned_full_model")
+tokenizer.save_pretrained("./finetuned_full_model")
+
+print("全量微调完成！")
+```
+
+#### 硬件需求对比
+
+| 模型规模 | 全量微调显存 | LoRA 显存 | QLoRA 显存 |
+|---------|-------------|----------|-----------|
+| 7B | >40GB | ~16GB | ~4GB |
+| 14B | >80GB | ~32GB | ~8GB |
+| 70B | >300GB | ~128GB | ~48GB |
+
+#### 全量微调显存优化技巧
+
+```python
+# 技巧1：使用 gradient_checkpointing（节省 ~30% 显存）
+model.gradient_checkpointing_enable()
+
+# 技巧2：使用 bfloat16（比 float16 更稳定）
+torch_dtype=torch.bfloat16
+
+# 技巧3：减小批次 + 增加梯度累积
+per_device_train_batch_size=1
+gradient_accumulation_steps=32
+
+# 技巧4：使用 DeepSpeed ZeRO（多卡分片）
+# ZeRO-1：优化器状态分片
+# ZeRO-2：优化器 + 梯度分片
+# ZeRO-3：优化器 + 梯度 + 参数分片（显存最低）
+
+# 技巧5：使用 FSDP（Fully Sharded Data Parallel）
+training_args = TrainingArguments(
+    fsdp="full_shard auto_wrap",
+    fsdp_config={
+        "fsdp_auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
+        "fsdp_sharding_strategy": "FULL_SHARD",
+    },
+)
+```
+
+#### DeepSpeed ZeRO-3 配置示例
+
+```json
+// deepspeed_config.json
+{
+    "zero_optimization": {
+        "stage": 3,
+        "offload_optimizer": {
+            "device": "cpu",
+            "pin_memory": true
+        },
+        "offload_param": {
+            "device": "cpu",
+            "pin_memory": true
+        },
+        "overlap_comm": true,
+        "contiguous_gradients": true
+    },
+    "bf16": {
+        "enabled": true
+    },
+    "gradient_accumulation_steps": 16,
+    "train_micro_batch_size_per_gpu": 1
+}
+```
+
+#### 全量微调 vs LoRA 实战对比
+
+| 维度 | 全量微调 | LoRA |
+|------|---------|------|
+| **代码复杂度** | 较复杂（需处理显存） | 简单 |
+| **训练速度** | 较慢（70亿参数） | 快（仅训练 0.1%） |
+| **数据要求** | >10000 条 | >2000 条即可 |
+| **过拟合风险** | 高（需注意轮数） | 低（参数少） |
+| **学习率** | 1e-5 ~ 1e-6 | 2e-4（大 10 倍） |
+| **适用场景** | 企业级大规模定制 | 大多数场景 |
+
 ### LoRA（强烈推荐）
 
 > 💡 **核心直觉**：微调时，权重的变化 ΔW 其实是"低秩"的——不需要改变所有参数，只需调整很少的"关键方向"就能达到效果。
