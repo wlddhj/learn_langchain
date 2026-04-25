@@ -65,6 +65,7 @@
 | 章节 | 文档 | 内容概要 |
 |------|------|----------|
 | 第26章 | [26-model-finetuning.md](26-model-finetuning.md) | 模型微调入门：LoRA/QLoRA原理、数据准备、训练实战、评估部署 |
+| — | [26-concepts-deep-dive.md](26-concepts-deep-dive.md) | **概念深度解析**：低秩性原理、量化机制、AdaLoRA动态调整、方案对比分析 |
 
 ## 第七部分：评估与优化（新增）
 
