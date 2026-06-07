@@ -6,11 +6,12 @@
 
 ```
 learn_langchain/
-├── demo/              # 77 个可运行的示例代码
+├── demo/              # 可运行的示例代码
 ├── docs/              # 33 章完整学习文档
 ├── data/              # 示例数据
 ├── pyproject.toml     # 项目配置
-└── .env               # 环境变量（API Key 等）
+├── .env.example       # 环境变量模板
+└── .env               # 环境变量（需自行创建，已加入 .gitignore）
 ```
 
 ## 学习路线
@@ -54,13 +55,21 @@ pip install -e .
 
 ### 配置 API Key
 
-复制 `.env` 文件并填入你的 API Key：
-
+```bash
+# 复制环境变量模板
+cp .env.example .env
 ```
-OPENAI_API_KEY=your-api-key-here
-```
 
-本项目默认使用 DashScope（通义千问）兼容的 OpenAI 接口，可在 `.env` 中配置 `OPENAI_API_BASE`。
+编辑 `.env`，填入你的 API Key。项目支持多个 LLM 提供商：
+
+| 提供商 | 环境变量 | 申请地址 |
+|--------|----------|----------|
+| GLM（智谱 AI） | `GLM_API_KEY` | https://open.bigmodel.cn/ |
+| DeepSeek | `DS_API_KEY` | https://platform.deepseek.com/ |
+| Qwen（通义千问） | `QWEN_API_KEY` | https://dashscope.console.aliyun.com/ |
+| LangSmith（可选） | `LANGCHAIN_API_KEY` | https://smith.langchain.com/ |
+
+至少配置其中一个提供商即可运行大部分示例。
 
 ### 运行示例
 
@@ -86,7 +95,9 @@ python demo/13_01_stategraph_basics.py
 - **LangChain** - LLM 应用开发框架
 - **LangGraph** - 多 Agent 工作流编排
 - **FAISS** - 向量相似度检索
-- **DashScope** - 阿里云大模型服务
+- **GLM（智谱 AI）** - 默认 LLM 提供商
+- **DeepSeek** - 备选 LLM 提供商
+- **Qwen（通义千问）** - 备选 LLM 提供商
 - **Python-dotenv** - 环境变量管理
 
 ## 文档
