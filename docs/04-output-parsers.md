@@ -175,6 +175,79 @@ print(result.keywords)     # ['棒', '流畅']
 - 更简洁：无需编写 format_instructions
 - 更准确：解析失败率更低
 
+### 底层实现策略
+
+`with_structured_output` 有三种实现策略，LangChain 会根据模型提供商自动选择最优方案：
+
+| 策略 | 原理 | 严格程度 |
+|------|------|----------|
+| `openai-tools` | 通过 tool calling + `tool_choice` 约束输出 | 最高，保证 schema 合规 |
+| `json_schema` | 通过 `response_format={"type":"json_schema"}` 约束 | 高，原生 JSON Schema 校验 |
+| `json_mode` | 通过 `response_format={"type":"json_object"}` 约束 | 中，只保证 JSON 格式，不保证 schema |
+
+可以通过 `method` 参数显式指定：
+
+```python
+# 显式指定使用 json_mode
+structured_llm = llm.with_structured_output(SentimentResult, method="json_mode")
+```
+
+### 各提供商支持情况
+
+本项目通过 `ChatOpenAI` + `base_url` 接入多家国产 LLM，各家对 `with_structured_output` 的支持程度不同：
+
+| 提供商 | `openai-tools` | `json_schema` | `json_mode` | 备注 |
+|--------|:-:|:-:|:-:|------|
+| **OpenAI** (GPT-4o) | ✅ | ✅ | ✅ | 原生支持，最稳定 |
+| **Anthropic** (Claude) | ✅ | ✅ | ✅ | 原生支持 |
+| **Google Gemini** | ✅ | ✅ | ✅ | 原生支持 |
+| **Qwen** (通义千问) | ⚠️ 部分 | ⚠️ 部分模型 | ✅ | 不支持 `stream=True` + `tools` 同时使用 |
+| **GLM** (智谱 AI) | ⚠️ 有限 | ⚠️ 有限 | ✅ | OpenAI 兼容接口对 `json_schema` 支持不完整 |
+| **DeepSeek** | ⚠️ 部分 | ⚠️ 有限 | ✅ | 建议使用 `json_mode` |
+
+> **注意**：由于 Qwen、GLM、DeepSeek 均通过 OpenAI 兼容接口接入，默认策略 `openai-tools` 可能不完全兼容。如果遇到报错，请切换为 `method="json_mode"`。
+
+### 推荐做法
+
+针对本项目的国产模型使用场景，按兼容性从高到低排列：
+
+**方案一：`with_structured_output` + `json_mode`（推荐）**
+
+兼容性好，大多数提供商支持：
+
+```python
+structured_llm = llm.with_structured_output(SentimentResult, method="json_mode")
+```
+
+**方案二：`PydanticOutputParser`（通用兜底）**
+
+不依赖任何原生 API 能力，纯 Prompt 工程，适用于所有 LLM：
+
+```python
+from langchain_core.output_parsers import PydanticOutputParser
+
+parser = PydanticOutputParser(pydantic_object=SentimentResult)
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "你是情感分析助手。\n{format_instructions}"),
+    ("human", "{text}"),
+])
+
+chain = prompt | llm | parser
+result = chain.invoke({
+    "text": "这个产品太棒了！",
+    "format_instructions": parser.get_format_instructions(),
+})
+```
+
+### 三种方式对比
+
+| 方式 | 优点 | 缺点 | 推荐场景 |
+|------|------|------|----------|
+| `with_structured_output()` | 调用简洁，无需手写 format_instructions | 依赖提供商 API 支持 | OpenAI / Anthropic 等原生支持的平台 |
+| `with_structured_output(method="json_mode")` | 兼容性好，大多数提供商支持 | 只保证 JSON 格式，schema 可能不完全匹配 | Qwen / GLM / DeepSeek 等兼容接口 |
+| `PydanticOutputParser` | 通用性最强，任何 LLM 都可用 | 需要手动注入 format_instructions | 所有提供商的兜底方案 |
+
 ## 4.7 自定义输出解析器
 
 当内置解析器不满足需求时：
